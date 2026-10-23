@@ -152,10 +152,9 @@ header .sub{color:var(--muted);font-size:.88rem}
 /* progress + controls */
 .prog{display:flex;gap:6px;margin-top:14px;align-items:center}
 .prog i{flex:1;height:4px;border-radius:999px;background:var(--line);overflow:hidden;position:relative}
-.prog i::after{content:"";position:absolute;inset:0;width:0;background:var(--accent)}
+.prog i::after{content:"";position:absolute;inset:0;width:var(--w,0%);background:var(--accent)}
 .prog i.done::after{width:100%}
-.prog i.run::after{animation:grow var(--d) linear forwards}
-@keyframes grow{from{width:0}to{width:100%}}
+body.paused .dot,body.paused .cur::after,body.paused .typing i{animation-play-state:paused}
 .ctl{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
 .ctl .l{display:flex;gap:8px}
 .ctl .btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -272,44 +271,62 @@ footer{margin-top:16px;font-size:.76rem;color:var(--muted);max-width:70ch}
 
 <script>
 const $=s=>document.querySelector(s);
-const stage=$('#stage'), curA=$('#curA'), curH=$('#curH'), cap=$('#cap'), url=$('#url');
-let paused=false, token=0;
-const sleep=ms=>new Promise(r=>{ const t0=performance.now(); (function tick(){ if(paused){ requestAnimationFrame(tick); return;} if(performance.now()-t0>=ms) r(); else requestAnimationFrame(tick); })(); });
+const stage=$('#stage'), curA=$('#curA'), curH=$('#curH'), cap=$('#cap'), url=$('#url'), prog=$('#prog');
+const ABORT=Symbol('abort');
+let paused=false, token=0, runId=0;
+/* every wait goes through here: it honors Pause and stops the scene if a Restart happened */
+const sleep=ms=>new Promise((res,rej)=>{ const my=runId; let remaining=ms, last=performance.now(); (function tick(now){ if(my!==token){ rej(ABORT); return; } if(!paused) remaining-=(now-last); last=now; if(remaining<=0) res(); else requestAnimationFrame(tick); })(performance.now()); });
 function pos(el,dx=0,dy=0){ const r=el.getBoundingClientRect(), s=stage.getBoundingClientRect(); return {x:r.left-s.left+r.width/2+dx, y:r.top-s.top+r.height/2+dy}; }
 async function move(cur,el,dx=0,dy=0,ms=900){ const p=pos(el,dx,dy); cur.style.transitionDuration=ms+'ms'; cur.style.transform=`translate(${p.x}px,${p.y}px)`; cur.classList.add('show'); await sleep(ms+80); }
 async function click(cur){ cur.classList.remove('click'); void cur.offsetWidth; cur.classList.add('click'); await sleep(420); }
 function show(id){ document.querySelectorAll('.page').forEach(p=>{ if(p.id===id){ p.classList.remove('left'); p.classList.add('on'); } else if(p.classList.contains('on')){ p.classList.remove('on'); p.classList.add('left'); } }); }
-async function say(t){ cap.classList.add('out'); await sleep(220); cap.textContent=t; cap.classList.remove('out'); }
+async function say(t){ cap.classList.add('out'); await sleep(220); cap.textContent=t; cap.classList.remove('out'); await sleep(350); }
 async function go(u){ url.classList.add('flash'); url.textContent=u; await sleep(300); url.classList.remove('flash'); }
 async function type(el,text,ms=38){ el.classList.add('active'); el.textContent=''; for(const ch of text){ el.textContent+=ch; await sleep(ms);} el.classList.remove('active'); }
-function reveal(list,step,from=0){ list.forEach((el,i)=>setTimeout(()=>el.classList.add('show'),from+i*step)); }
+async function countUp(v,ms=900){ const n=+v.dataset.n, suf=v.dataset.suffix||''; const t0=performance.now(); let k=0; while(k<1){ await sleep(16); k=Math.min(1,(performance.now()-t0)/ms); const val=Math.round(n*(1-Math.pow(1-k,3))); v.textContent=(suf==='s'?Math.floor(val/60)+':'+String(val%60).padStart(2,'0'):val+suf); } }
+function park(cur){ cur.style.transitionDuration='0ms'; cur.style.transform='translate(70px,90px)'; cur.classList.remove('show','click'); void cur.offsetWidth; }
 function resetAll(){
   document.querySelectorAll('.show').forEach(e=>e.classList.remove('show'));
   document.querySelectorAll('.hl,.no,.hot,.closed,.pressed').forEach(e=>e.classList.remove('hl','no','hot','closed','pressed'));
   $('#field').hidden=true; $('#acts').hidden=true; $('#field').textContent=''; $('#field').classList.remove('cur','active'); $('#bub').classList.remove('gone'); $('#meter').classList.remove('gone'); document.querySelector('.det').classList.remove('writing');
   $('#cpfInp').textContent=''; $('#pepInp').textContent=''; $('#pepTbl').style.opacity=0; $('#chip4471').textContent='Screening'; $('#chip4471').className='chip warn';
-  document.querySelectorAll('#tiles .v').forEach(v=>v.textContent='0'); $('#who').textContent='sphinx-agent-01';
-  curA.classList.remove('show'); curH.classList.remove('show');
+  document.querySelectorAll('#tiles .v').forEach(v=>v.textContent='0'); $('#who').textContent='sphinx-agent-01'; $('#nbclock').textContent='';
+  park(curA); park(curH);
   document.querySelectorAll('.page').forEach(p=>{p.classList.remove('on','left')}); $('#pQueue').classList.add('on');
+  cap.classList.remove('out'); cap.innerHTML='&nbsp;'; url.textContent='pld.suafintech.com.br/alertas';
 }
 const SCENES=[
-  async()=>{ await say('The agent logs in and takes the next alert.'); await go('pld.suafintech.com.br/alertas'); await sleep(500); const row=$('#row4471'); await move(curA,row,-120,0,1100); row.classList.add('hot'); await click(curA); await sleep(500); show('pDetail'); await go('pld.suafintech.com.br/alertas/ALR-4471'); await sleep(900); },
-  async()=>{ await say('First, the tax authority: is the CPF real and regular?'); show('pReceita'); await go('servicos.receita.fazenda.gov.br/cpf'); await sleep(500); await move(curA,$('#cpfInp'),0,0,700); await click(curA); await type($('#cpfInp'),'***.482.117-**',45); await move(curA,$('#cpfBtn'),0,0,500); await click(curA); await sleep(300); $('#cpfRes').classList.add('show'); await sleep(1500); },
-  async()=>{ await say('Then the PEP list. Three namesakes.'); show('pCGU'); await go('portaldatransparencia.gov.br/pep'); await sleep(400); await move(curA,$('#pepInp'),0,0,700); await click(curA); await type($('#pepInp'),'João Carlos da Silva',40); await sleep(300); $('#pepTbl').style.opacity=1; await sleep(700); const rows=[...document.querySelectorAll('#pepTbl .r')].slice(1); for(const r of rows){ await move(curA,r,-60,0,500); r.classList.add('hl'); await sleep(550); r.classList.remove('hl'); r.classList.add('no'); } await say('None was born on his date. Not him.'); $('#pepRes').classList.add('show'); await sleep(1400); },
-  async()=>{ await say('Media, sanctions, company links, transactions.'); show('pMedia'); await go('checks · 4 sources'); await sleep(400); const rows=[...document.querySelectorAll('#srch .row')]; for(const r of rows){ await move(curA,r,-200,0,420); r.classList.add('show'); await sleep(380);} await sleep(900); },
-  async()=>{ await say('Back in the case, with notes the inspector can read.'); show('pDetail'); await go('pld.suafintech.com.br/alertas/ALR-4471'); await sleep(500); move(curA,$('#notes'),-40,-60,800); const notes=[...document.querySelectorAll('#notes li')]; for(const n of notes){ n.classList.add('show'); $('#nbclock').textContent=n.querySelector('small').textContent.split('·')[1].trim(); await sleep(520);} await sleep(700); },
-  async()=>{ await say('Three roles argue it out before anything is recommended.'); const bs=[...document.querySelectorAll('#bub .b')]; for(const b of bs){ await sleep(900); b.classList.add('show'); } await sleep(500); $('#meter').classList.add('show'); await sleep(1600); },
-  async()=>{ await say('It writes the justification. In Portuguese.'); const bs=[...document.querySelectorAll('#bub .b')]; bs.forEach(b=>b.classList.remove('show')); $('#meter').classList.remove('show'); await sleep(400); $('#bub').classList.add('gone'); $('#meter').classList.add('gone'); document.querySelector('.det').classList.add('writing'); const f=$('#field'); f.hidden=false; f.classList.add('cur'); await sleep(200); await move(curA,f,0,-30,600); await click(curA); await type(f,'Três homônimos na lista PEP da CGU; nenhum coincide com a data de nascimento (14/07/1984) nem com o CPF. Situação cadastral regular. Sócio de empresa ativa desde 2019, sem CEIS/CNEP. Sem sanções nem mídia adversa em 24 meses. Perfil transacional compatível com a renda; depósitos abaixo de R$ 2.000, sem fracionamento. Conclusão: falso positivo. Encerrar sem comunicação ao COAF.',16); f.classList.remove('cur'); await sleep(600); },
-  async()=>{ await say('Your analyst decides. One click.'); $('#acts').hidden=false; $('#who').textContent='Ana P.'; curA.classList.remove('show'); await sleep(300); await move(curH,$('#approve'),0,0,1100); await click(curH); $('#approve').classList.add('pressed'); await sleep(250); $('#stamp').classList.add('show'); await sleep(1600); show('pQueue'); await go('pld.suafintech.com.br/alertas'); curH.classList.remove('show'); await sleep(500); const row=$('#row4471'); row.classList.remove('hot'); row.classList.add('closed'); const c=$('#chip4471'); c.textContent='Encerrado'; c.className='chip ok'; await sleep(1200); },
-  async()=>{ await say('One alert, one minute forty, nothing filed without a person.'); show('pEnd'); await go('pilot · 200 historical alerts · shadow mode'); await sleep(300); const tiles=[...document.querySelectorAll('#tiles .tile')]; reveal(tiles,350,100); for(const v of document.querySelectorAll('#tiles .v')){ const n=+v.dataset.n, suf=v.dataset.suffix||''; const t0=performance.now(); await new Promise(res=>{ (function f(){ const k=Math.min(1,(performance.now()-t0)/900); const val=Math.round(n*(1-Math.pow(1-k,3))); v.textContent=(suf==='s'?Math.floor(val/60)+':'+String(val%60).padStart(2,'0'):val+suf); if(k<1) requestAnimationFrame(f); else res(); })(); }); } },
+  async()=>{ await say('The agent logs in and takes the next alert.'); await go('pld.suafintech.com.br/alertas'); await sleep(900); const row=$('#row4471'); await move(curA,row,-120,0,1200); await sleep(500); row.classList.add('hot'); await sleep(2200); await click(curA); await sleep(600); show('pDetail'); await go('pld.suafintech.com.br/alertas/ALR-4471'); await move(curA,$('#pDetail .card'),120,0,700); await sleep(2600); },
+  async()=>{ await say('First, the tax authority: is the CPF real and regular?'); show('pReceita'); await go('servicos.receita.fazenda.gov.br/cpf'); await sleep(700); await move(curA,$('#cpfInp'),0,0,800); await click(curA); await type($('#cpfInp'),'***.482.117-**',55); await sleep(300); await move(curA,$('#cpfBtn'),0,0,550); await click(curA); await sleep(450); $('#cpfRes').classList.add('show'); await sleep(2800); },
+  async()=>{ await say('Then the PEP list. Three namesakes.'); show('pCGU'); await go('portaldatransparencia.gov.br/pep'); await sleep(600); await move(curA,$('#pepInp'),0,0,800); await click(curA); await type($('#pepInp'),'João Carlos da Silva',48); await sleep(400); $('#pepTbl').style.opacity=1; await sleep(1300); const rows=[...document.querySelectorAll('#pepTbl .r')].slice(1); for(const r of rows){ await move(curA,r,-60,0,550); r.classList.add('hl'); await sleep(900); r.classList.remove('hl'); r.classList.add('no'); await sleep(250); } await say('None was born on his date. Not him.'); $('#pepRes').classList.add('show'); await sleep(2400); },
+  async()=>{ await say('Media, sanctions, company links, transactions.'); show('pMedia'); await go('checks · 4 sources'); await sleep(600); const rows=[...document.querySelectorAll('#srch .row')]; for(const r of rows){ await move(curA,r,-200,0,450); r.classList.add('show'); await sleep(520);} await sleep(1800); },
+  async()=>{ await say('Back in the case, with notes the inspector can read.'); show('pDetail'); await go('pld.suafintech.com.br/alertas/ALR-4471'); await sleep(600); move(curA,$('#notes'),-40,-60,800); const notes=[...document.querySelectorAll('#notes li')]; for(const n of notes){ n.classList.add('show'); $('#nbclock').textContent=n.querySelector('small').textContent.split('·')[1].trim(); await sleep(750);} await sleep(1800); },
+  async()=>{ await say('Three roles argue it out before anything is recommended.'); const bs=[...document.querySelectorAll('#bub .b')]; for(const b of bs){ await sleep(1300); b.classList.add('show'); } await sleep(700); $('#meter').classList.add('show'); await sleep(2600); },
+  async()=>{ await say('It writes the justification. In Portuguese.'); const bs=[...document.querySelectorAll('#bub .b')]; bs.forEach(b=>b.classList.remove('show')); $('#meter').classList.remove('show'); await sleep(450); $('#bub').classList.add('gone'); $('#meter').classList.add('gone'); document.querySelector('.det').classList.add('writing'); const f=$('#field'); f.hidden=false; f.classList.add('cur'); await sleep(250); await move(curA,f,0,-30,650); await click(curA); await type(f,'Três homônimos na lista PEP da CGU; nenhum coincide com a data de nascimento (14/07/1984) nem com o CPF. Situação cadastral regular. Sócio de empresa ativa desde 2019, sem CEIS/CNEP. Sem sanções nem mídia adversa em 24 meses. Perfil transacional compatível com a renda; depósitos abaixo de R$ 2.000, sem fracionamento. Conclusão: falso positivo. Encerrar sem comunicação ao COAF.',2); f.classList.remove('cur'); await sleep(1500); },
+  async()=>{ await say('Your analyst decides. One click.'); $('#acts').hidden=false; $('#who').textContent='Ana P.'; curA.classList.remove('show'); await sleep(500); await move(curH,$('#approve'),0,0,1200); await sleep(400); await click(curH); $('#approve').classList.add('pressed'); await sleep(300); $('#stamp').classList.add('show'); await sleep(2200); show('pQueue'); await go('pld.suafintech.com.br/alertas'); curH.classList.remove('show'); await sleep(700); const row=$('#row4471'); row.classList.remove('hot'); row.classList.add('closed'); const c=$('#chip4471'); c.textContent='Encerrado'; c.className='chip ok'; await sleep(2000); },
+  async()=>{ await say('One alert, one minute forty, nothing filed without a person.'); show('pEnd'); await go('pilot · 200 historical alerts · shadow mode'); await sleep(400); const tiles=[...document.querySelectorAll('#tiles .tile')]; for(const t of tiles){ t.classList.add('show'); await sleep(350);} for(const v of document.querySelectorAll('#tiles .v')){ await countUp(v,900); } },
 ];
-const DUR=[5200,7500,9800,6200,5200,6600,9800,7200,4000];
-const prog=$('#prog'); SCENES.forEach(()=>prog.appendChild(document.createElement('i')));
-async function run(){ const my=++token; resetAll(); for(let i=0;i<SCENES.length;i++){ if(my!==token) return; [...prog.children].forEach((b,k)=>{ b.classList.toggle('done',k<i); b.classList.remove('run'); if(k===i){ b.style.setProperty('--d',DUR[i]+'ms'); void b.offsetWidth; b.classList.add('run'); } }); await SCENES[i](); if(my!==token) return; } [...prog.children].forEach(b=>b.classList.add('done')); }
-$('#pause').addEventListener('click',()=>{ paused=!paused; $('#pause').textContent=paused?'Resume':'Pause'; });
-$('#restart').addEventListener('click',()=>{ paused=false; $('#pause').textContent='Pause'; run(); });
-$('#replay').addEventListener('click',()=>{ paused=false; $('#pause').textContent='Pause'; run(); });
-window.addEventListener('resize',()=>{});
+/* measured scene durations, used only to pace the progress bar */
+const DUR=[10600,8550,14150,8680,7230,7880,10420,8830,5180];
+SCENES.forEach(()=>prog.appendChild(document.createElement('i')));
+const bars=[...prog.children];
+let barIdx=-1, barStart=0, barPausedAt=0;
+function barFrame(now){ if(barIdx>=0&&barIdx<bars.length){ if(paused){ if(!barPausedAt) barPausedAt=now; } else { if(barPausedAt){ barStart+=now-barPausedAt; barPausedAt=0; } const k=Math.min(1,(now-barStart)/DUR[barIdx]); bars[barIdx].style.setProperty('--w',(k*100)+'%'); } } requestAnimationFrame(barFrame); }
+requestAnimationFrame(barFrame);
+window.__sceneLog=[];
+async function run(){
+  const my=++token; runId=my; paused=false; $('#pause').textContent='Pause'; document.body.classList.remove('paused');
+  resetAll(); bars.forEach(b=>{ b.classList.remove('done'); b.style.setProperty('--w','0%'); });
+  try{
+    for(let i=0;i<SCENES.length;i++){ barIdx=i; barStart=performance.now(); barPausedAt=0; const t0=performance.now(); await SCENES[i](); window.__sceneLog.push([i,Math.round(performance.now()-t0)]); bars[i].classList.add('done'); bars[i].style.setProperty('--w','100%'); }
+    barIdx=-1;
+  }catch(e){ if(e!==ABORT) console.error(e); }
+}
+function togglePause(){ paused=!paused; $('#pause').textContent=paused?'Resume':'Pause'; document.body.classList.toggle('paused',paused); }
+$('#pause').addEventListener('click',togglePause);
+$('#restart').addEventListener('click',run);
+$('#replay').addEventListener('click',run);
+document.addEventListener('keydown',e=>{ if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return; if(e.code==='Space'){ e.preventDefault(); togglePause(); } if(e.key==='r'||e.key==='R') run(); });
 run();
 </script>
 </body>
