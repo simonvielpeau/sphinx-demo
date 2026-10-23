@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sphinx on a Brazilian Case</title>
+<meta name="description" content="Two-minute animation of a Sphinx-style compliance agent working one Brazilian screening alert, up to the analyst's approval.">
+<meta name="robots" content="noindex">
+<style>
+/* Base reset identical to the hosted preview, so the page renders the same. */
+:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;font:14px system-ui}
+img{max-width:100%}
+[hidden]{display:none!important}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* One light look, on purpose: a client's case manager in a browser window, and a small agent that works inside it. Scenes change inside the same window, never by swapping the page. */
+:root{
+  --bg:#f4f3ef; --paper:#ffffff; --ink:#1b1f26; --ink-2:#555c68; --muted:#8c93a0; --line:#e3e2dc; --line-2:#f0efea;
+  --accent:#1f6f8b; --accent-soft:#e4f0f4; --agent:#1f6f8b; --human:#b4572a; --ok:#1b7f45; --ok-soft:#e4f4ea; --warn:#9a5b00; --warn-soft:#fff2db; --bad:#b3261e; --bad-soft:#fbe7e5;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg)}
+body{margin:0;color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.wrap{max-width:960px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:26px 48px}
+header{display:flex;justify-content:space-between;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+header h1{font-size:1.1rem;font-weight:600;margin:0;letter-spacing:-.01em}
+header .sub{color:var(--muted);font-size:.88rem}
+
+/* caption above the window: one short line per scene */
+.cap{min-height:34px;font-size:1.25rem;font-weight:500;letter-spacing:-.01em;margin:0 0 12px;transition:opacity .35s,transform .35s}
+.cap.out{opacity:0;transform:translateY(4px)}
+@media (max-width:520px){.cap{font-size:1.05rem}}
+
+/* browser window */
+.stage{position:relative}
+.browser{background:var(--paper);border:1px solid var(--line);border-radius:12px;box-shadow:0 1px 2px rgba(27,31,38,.05),0 30px 60px -40px rgba(27,31,38,.35);overflow:hidden}
+.bar{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line);background:#fafaf7}
+.bar .dots{display:flex;gap:6px}.bar .dots i{width:10px;height:10px;border-radius:50%;background:#ddd9d0;display:block}
+.bar .url{flex:1;font-family:var(--mono);font-size:.78rem;color:var(--ink-2);background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:5px 10px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:background .3s}
+.bar .url.flash{background:var(--accent-soft)}
+.view{position:relative;height:500px;overflow:hidden}
+@media (max-width:640px){.view{height:560px}}
+.gone{display:none !important}
+@media (max-width:640px){.det.writing .nb{display:none}}
+.page{position:absolute;inset:0;padding:18px 20px;opacity:0;transform:translateX(24px);transition:opacity .45s ease,transform .45s ease;pointer-events:none;overflow:hidden}
+.page.on{opacity:1;transform:none;pointer-events:auto}
+.page.left{transform:translateX(-24px)}
+.ph{font-size:.74rem;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;display:flex;justify-content:space-between;gap:10px}
+
+/* queue */
+.q{border:1px solid var(--line);border-radius:8px;overflow:hidden;font-size:.9rem}
+.q .r{display:grid;grid-template-columns:96px minmax(0,1fr) 104px 70px;gap:10px;padding:10px 12px;border-top:1px solid var(--line-2);align-items:center;transition:background .35s}
+.q .r:first-child{border-top:0;background:var(--line-2);font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.q .r .w{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.q .r.hot{background:var(--accent-soft)}
+.q .r.closed{color:var(--muted)}
+.q .r.closed .w{text-decoration:line-through}
+@media (max-width:640px){.q .r{grid-template-columns:80px minmax(0,1fr) 84px}.q .r>:last-child{display:none}}
+.chip{display:inline-block;font-family:var(--mono);font-size:.68rem;padding:2px 8px;border-radius:999px;background:var(--line-2);color:var(--ink-2);white-space:nowrap}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}.chip.warn{background:var(--warn-soft);color:var(--warn)}.chip.bad{background:var(--bad-soft);color:var(--bad)}.chip.acc{background:var(--accent-soft);color:var(--accent)}
+
+/* alert detail: left card + right notebook */
+.det{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:16px;height:100%}
+@media (max-width:640px){.det{grid-template-columns:1fr;gap:10px}}
+.card{border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}
+.card h3{margin:0 0 4px;font-size:1rem;font-weight:600}
+.kv{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 12px;font-size:.86rem;margin-top:8px}
+.kv b{font-family:var(--mono);font-weight:400;font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;padding-top:2px}
+.nb{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fcfcfa;min-width:0}
+.nb .t{font-family:var(--mono);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.nb ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.nb li{display:grid;grid-template-columns:20px minmax(0,1fr);gap:8px;font-size:.86rem;opacity:0;transform:translateY(5px);transition:opacity .35s,transform .35s;align-items:start}
+.nb li.show{opacity:1;transform:none}
+.nb li i{width:18px;height:18px;border-radius:50%;background:var(--ok-soft);color:var(--ok);display:grid;place-items:center;font-size:.72rem;font-style:normal}
+.nb li i.warn{background:var(--warn-soft);color:var(--warn)}
+.nb li small{display:block;color:var(--ink-2);font-size:.78rem}
+
+/* debate bubbles */
+.bub{display:grid;gap:8px;margin-top:10px}
+.bub .b{max-width:92%;padding:9px 12px;border-radius:12px;font-size:.86rem;opacity:0;transform:translateY(6px);transition:opacity .35s,transform .35s;border:1px solid var(--line);background:var(--paper)}
+.bub .b.show{opacity:1;transform:none}
+.bub .b b{display:block;font-family:var(--mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;margin-bottom:2px}
+.bub .b.pro{border-color:#f1c9c6}.bub .b.pro b{color:var(--bad)}
+.bub .b.def{border-color:#c6e4d0;justify-self:end}.bub .b.def b{color:var(--ok)}
+.bub .b.jud{border-color:var(--accent);background:var(--accent-soft)}.bub .b.jud b{color:var(--accent)}
+.typing{display:inline-flex;gap:3px;padding:6px 10px}.typing i{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:tp 1s infinite}.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes tp{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-4px);opacity:1}}
+.meter{margin-top:10px;display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:.74rem;color:var(--ink-2);opacity:0;transition:opacity .35s}
+.meter.show{opacity:1}.meter .t{flex:1;height:7px;border-radius:999px;background:var(--line-2);overflow:hidden}.meter .t i{display:block;height:100%;width:0;background:var(--accent);transition:width 1.1s ease-out}.meter.show .t i{width:93%}
+
+/* justification field */
+.field{margin-top:10px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:.86rem;min-height:120px;white-space:pre-wrap;background:#fff;color:var(--ink)}
+.field.active{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.cur::after{content:"▍";color:var(--accent);animation:bl 1s steps(1) infinite}
+@keyframes bl{50%{opacity:0}}
+.acts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.btn{font:inherit;font-size:.86rem;padding:7px 12px;border-radius:7px;border:1px solid var(--line);background:#fff;color:var(--ink)}
+.btn.ok{border-color:var(--ok);color:var(--ok)}
+.btn.ok.pressed{background:var(--ok);color:#fff;transform:scale(.98)}
+.stamp{margin-top:10px;display:inline-flex;align-items:center;gap:8px;font-size:.86rem;color:var(--ok);opacity:0;transform:scale(.9);transition:opacity .35s,transform .35s}
+.stamp.show{opacity:1;transform:none}
+.stamp i{width:20px;height:20px;border-radius:50%;background:var(--ok);color:#fff;display:grid;place-items:center;font-style:normal;font-size:.75rem}
+
+/* external sites */
+.gov{font-size:.9rem}
+.gov .top{display:flex;align-items:center;gap:10px;padding-bottom:10px;border-bottom:3px solid #1351b4;margin-bottom:14px}
+.gov .top b{font-weight:600}.gov .top span{color:var(--muted);font-size:.8rem}
+.gov.cgu .top{border-color:#0b6b3a}
+.form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;max-width:420px}
+.inp{border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-family:var(--mono);font-size:.9rem;min-height:36px;background:#fff}
+.inp.active{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.res{margin-top:14px;border:1px solid var(--line);border-radius:8px;padding:12px;max-width:520px;opacity:0;transform:translateY(6px);transition:opacity .4s,transform .4s;background:#fff}
+.res.show{opacity:1;transform:none}
+.res .kv{margin-top:4px}
+.tbl{border:1px solid var(--line);border-radius:8px;overflow:hidden;font-size:.86rem;max-width:600px}
+.tbl .r{display:grid;grid-template-columns:minmax(0,1.4fr) 110px minmax(0,1fr);gap:10px;padding:8px 12px;border-top:1px solid var(--line-2);transition:background .3s,color .3s}
+.tbl .r:first-child{border-top:0;background:var(--line-2);font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.tbl .r.hl{background:var(--warn-soft)}
+.tbl .r.no{color:var(--muted);background:transparent}
+.tbl .r.no .n{text-decoration:line-through}
+.tbl .r .n{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srch{display:grid;gap:8px;max-width:520px}
+.srch .row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;opacity:0;transform:translateY(5px);transition:opacity .35s,transform .35s;font-size:.88rem}
+.srch .row.show{opacity:1;transform:none}
+
+/* end screen */
+.end{display:grid;place-items:center;height:100%;text-align:center}
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;width:100%;max-width:640px}
+@media (max-width:640px){.tiles{grid-template-columns:1fr;gap:8px}}
+.tile{border:1px solid var(--line);border-radius:10px;padding:16px 12px;opacity:0;transform:translateY(8px);transition:opacity .4s,transform .4s}
+.tile.show{opacity:1;transform:none}
+.tile .v{font-size:2rem;font-weight:600;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums}
+.tile .l{color:var(--ink-2);font-size:.84rem;margin-top:4px}
+.end .btn.primary{margin-top:18px;background:var(--accent);border-color:var(--accent);color:#fff;padding:9px 16px}
+
+/* cursors */
+.cursor{position:absolute;left:0;top:0;z-index:5;pointer-events:none;opacity:0;transition:transform .9s cubic-bezier(.3,.9,.25,1),opacity .3s;will-change:transform}
+.cursor svg{display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,.25))}
+.cursor .tag{position:absolute;left:18px;top:16px;font-family:var(--mono);font-size:.66rem;padding:2px 7px;border-radius:999px;color:#fff;white-space:nowrap}
+.cursor.agent .tag{background:var(--agent)}.cursor.human .tag{background:var(--human)}
+.cursor .ring{position:absolute;left:-6px;top:-6px;width:12px;height:12px;border-radius:50%;border:2px solid var(--agent);opacity:0;transform:scale(.5)}
+.cursor.human .ring{border-color:var(--human)}
+.cursor.click .ring{animation:ring .5s ease-out}
+@keyframes ring{0%{opacity:.9;transform:scale(.5)}100%{opacity:0;transform:scale(2.4)}}
+.cursor.show{opacity:1}
+
+/* progress + controls */
+.prog{display:flex;gap:6px;margin-top:14px;align-items:center}
+.prog i{flex:1;height:4px;border-radius:999px;background:var(--line);overflow:hidden;position:relative}
+.prog i::after{content:"";position:absolute;inset:0;width:0;background:var(--accent)}
+.prog i.done::after{width:100%}
+.prog i.run::after{animation:grow var(--d) linear forwards}
+@keyframes grow{from{width:0}to{width:100%}}
+.ctl{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+.ctl .l{display:flex;gap:8px}
+.ctl .btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hint{font-size:.78rem;color:var(--muted)}
+footer{margin-top:16px;font-size:.76rem;color:var(--muted);max-width:70ch}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms !important;animation-duration:.01ms !important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>Sphinx on a Brazilian case</h1><div class="sub">Two minutes. Watch the agent work.</div></header>
+  <p class="cap" id="cap">&nbsp;</p>
+
+  <div class="stage" id="stage">
+    <div class="browser">
+      <div class="bar"><div class="dots"><i></i><i></i><i></i></div><div class="url" id="url">pld.suafintech.com.br/alertas</div></div>
+      <div class="view" id="view">
+
+        <section class="page on" id="pQueue">
+          <div class="ph"><span>Fila de alertas · 5 abertos</span><span>analista: <b id="who">sphinx-agent-01</b></span></div>
+          <div class="q">
+            <div class="r"><span>Alerta</span><span>Assunto</span><span>Tipo</span><span>Idade</span></div>
+            <div class="r"><span class="mono">ALR-4468</span><span class="w">Comercial Vale Verde Ltda · CNPJ 12.345.678/0001-90</span><span class="chip">KYB</span><span class="mono">2 d</span></div>
+            <div class="r"><span class="mono">ALR-4469</span><span class="w">48 transferências de R$ 1.900 em 6 h</span><span class="chip warn">Monitoramento</span><span class="mono">1 d</span></div>
+            <div class="r" id="row4471"><span class="mono">ALR-4471</span><span class="w">João Carlos da Silva · possível PEP</span><span class="chip warn" id="chip4471">Screening</span><span class="mono">4 h</span></div>
+            <div class="r"><span class="mono">ALR-4472</span><span class="w">Maria Aparecida Souza · sanções ONU</span><span class="chip bad">Screening</span><span class="mono">3 h</span></div>
+            <div class="r"><span class="mono">ALR-4473</span><span class="w">Pix de 31 pagadores, saque em 2 h</span><span class="chip warn">Monitoramento</span><span class="mono">1 h</span></div>
+          </div>
+        </section>
+
+        <section class="page" id="pDetail">
+          <div class="ph"><span>ALR-4471 · screening · possível PEP</span><span>procedimento PLD-BR v3.2</span></div>
+          <div class="det">
+            <div>
+              <div class="card"><h3>João Carlos da Silva</h3>
+                <div class="kv"><b>CPF</b><span class="mono">***.482.117-**</span><b>Nascimento</b><span>14/07/1984</span><b>Renda</b><span>R$ 9.800/mês</span><b>Cliente desde</b><span>03/2024</span></div>
+              </div>
+              <div class="bub" id="bub">
+                <div class="b pro"><b>Prosecutor</b>Name matches three PEP entries; two cash deposits in 90 days.</div>
+                <div class="b def"><b>Defender</b>None of the three share his birth date or CPF; deposits under R$ 2,000, in line with income.</div>
+                <div class="b jud"><b>Judge</b>Identity mismatch on all three. No typology triggered. Close as false positive.</div>
+              </div>
+              <div class="meter" id="meter"><span>confidence</span><div class="t"><i></i></div><span>0.93 / 0.80</span></div>
+              <div class="field" id="field" hidden></div>
+              <div class="acts" id="acts" hidden><button class="btn ok" id="approve" type="button">Aprovar</button><button class="btn" type="button">Editar</button><button class="btn" type="button">Escalar</button></div>
+              <div class="stamp" id="stamp"><i>✓</i><span>Aprovado por Ana P. · 14:07:30 · justificativa anexada</span></div>
+            </div>
+            <div class="nb"><div class="t"><span class="chip acc">agent notes</span><span id="nbclock" class="mono"></span></div>
+              <ul id="notes">
+                <li><i>✓</i><div>CPF regular<small>Receita Federal · 14:06:19</small></div></li>
+                <li><i class="warn">3</i><div>Três homônimos na lista PEP, nenhum com a mesma data de nascimento<small>CGU · 14:06:27</small></div></li>
+                <li><i>✓</i><div>Sócio de empresa ativa de TI desde 2019, sem CEIS/CNEP<small>Receita, CGU · 14:06:33</small></div></li>
+                <li><i>✓</i><div>Sem mídia adversa em 24 meses, sem sanções<small>ONU, OFAC, UE, UK · 14:06:38</small></div></li>
+                <li><i>✓</i><div>Entradas compatíveis com a renda; 2 depósitos de R$ 1.500<small>interno · 14:06:41</small></div></li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="page" id="pReceita">
+          <div class="gov"><div class="top"><b>Receita Federal</b><span>Consulta situação cadastral CPF</span></div>
+            <div class="form"><div class="inp" id="cpfInp"></div><button class="btn" id="cpfBtn" type="button">Consultar</button></div>
+            <div class="res" id="cpfRes"><div class="kv"><b>Nome</b><span>JOÃO CARLOS DA SILVA</span><b>Nascimento</b><span>14/07/1984</span><b>Situação</b><span class="chip ok">REGULAR</span><b>Emitido</b><span>2003</span></div></div>
+          </div>
+        </section>
+
+        <section class="page" id="pCGU">
+          <div class="gov cgu"><div class="top"><b>Portal da Transparência</b><span>Pessoas expostas politicamente</span></div>
+            <div class="form"><div class="inp" id="pepInp"></div><button class="btn" type="button">Buscar</button></div>
+            <div class="tbl" id="pepTbl" style="margin-top:14px;opacity:0;transition:opacity .4s">
+              <div class="r"><span>Nome</span><span>Nascimento</span><span>Função</span></div>
+              <div class="r"><span class="n">JOÃO CARLOS DA SILVA</span><span>12/03/1971</span><span>Vereador</span></div>
+              <div class="r"><span class="n">JOÃO CARLOS DA SILVA</span><span>05/09/1966</span><span>Secretário municipal</span></div>
+              <div class="r"><span class="n">JOÃO CARLOS DA SILVA</span><span>22/11/1980</span><span>Deputado estadual</span></div>
+            </div>
+            <div class="res" id="pepRes" style="max-width:600px"><span class="chip ok">nenhuma correspondência</span> <span style="font-size:.86rem;color:var(--ink-2);margin-left:6px">cliente nascido em 14/07/1984</span></div>
+          </div>
+        </section>
+
+        <section class="page" id="pMedia">
+          <div class="gov"><div class="top"><b>Verificações</b><span>mídia, sanções, vínculos</span></div>
+            <div class="srch" id="srch">
+              <div class="row"><span>Mídia adversa, 24 meses, homônimos excluídos</span><span class="chip ok">0 resultados</span></div>
+              <div class="row"><span>Listas ONU, OFAC, UE, UK</span><span class="chip ok">sem correspondência</span></div>
+              <div class="row"><span>QSA: sócio-administrador, Silva Serviços de TI ME, desde 2019</span><span class="chip ok">ativa</span></div>
+              <div class="row"><span>CEIS / CNEP</span><span class="chip ok">sem registro</span></div>
+              <div class="row"><span>Perfil transacional vs renda declarada</span><span class="chip ok">compatível</span></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="page" id="pEnd">
+          <div class="end"><div>
+            <div class="tiles" id="tiles">
+              <div class="tile"><div class="v" data-n="100" data-suffix="s">0</div><div class="l">from the queue to the written justification</div></div>
+              <div class="tile"><div class="v" data-n="0">0</div><div class="l">decisions filed without a person</div></div>
+              <div class="tile"><div class="v" data-n="100" data-suffix="%">0</div><div class="l">of cases with sources, timestamps and who approved</div></div>
+            </div>
+            <button class="btn primary" id="replay" type="button">Watch again</button>
+          </div></div>
+        </section>
+
+      </div>
+    </div>
+
+    <div class="cursor agent" id="curA"><svg width="18" height="22" viewBox="0 0 18 22"><path d="M1 1 L1 17 L5.5 13 L8.5 20 L11.5 18.6 L8.6 12 L15 12 Z" fill="#1f6f8b" stroke="#fff" stroke-width="1.2"/></svg><span class="tag">agent</span><span class="ring"></span></div>
+    <div class="cursor human" id="curH"><svg width="18" height="22" viewBox="0 0 18 22"><path d="M1 1 L1 17 L5.5 13 L8.5 20 L11.5 18.6 L8.6 12 L15 12 Z" fill="#b4572a" stroke="#fff" stroke-width="1.2"/></svg><span class="tag">Ana, analyst</span><span class="ring"></span></div>
+  </div>
+
+  <div class="prog" id="prog"></div>
+  <div class="ctl"><div class="l"><button class="btn" type="button" id="pause">Pause</button><button class="btn" type="button" id="restart">Restart</button></div><span class="hint">Everything here is fictional: the client, the names, the figures.</span></div>
+  <footer>Illustration prepared by Simon Vielpeau for a case study on Sphinx's Brazil launch. Not an official Sphinx page.</footer>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const stage=$('#stage'), curA=$('#curA'), curH=$('#curH'), cap=$('#cap'), url=$('#url');
+let paused=false, token=0;
+const sleep=ms=>new Promise(r=>{ const t0=performance.now(); (function tick(){ if(paused){ requestAnimationFrame(tick); return;} if(performance.now()-t0>=ms) r(); else requestAnimationFrame(tick); })(); });
+function pos(el,dx=0,dy=0){ const r=el.getBoundingClientRect(), s=stage.getBoundingClientRect(); return {x:r.left-s.left+r.width/2+dx, y:r.top-s.top+r.height/2+dy}; }
+async function move(cur,el,dx=0,dy=0,ms=900){ const p=pos(el,dx,dy); cur.style.transitionDuration=ms+'ms'; cur.style.transform=`translate(${p.x}px,${p.y}px)`; cur.classList.add('show'); await sleep(ms+80); }
+async function click(cur){ cur.classList.remove('click'); void cur.offsetWidth; cur.classList.add('click'); await sleep(420); }
+function show(id){ document.querySelectorAll('.page').forEach(p=>{ if(p.id===id){ p.classList.remove('left'); p.classList.add('on'); } else if(p.classList.contains('on')){ p.classList.remove('on'); p.classList.add('left'); } }); }
+async function say(t){ cap.classList.add('out'); await sleep(220); cap.textContent=t; cap.classList.remove('out'); }
+async function go(u){ url.classList.add('flash'); url.textContent=u; await sleep(300); url.classList.remove('flash'); }
+async function type(el,text,ms=38){ el.classList.add('active'); el.textContent=''; for(const ch of text){ el.textContent+=ch; await sleep(ms);} el.classList.remove('active'); }
+function reveal(list,step,from=0){ list.forEach((el,i)=>setTimeout(()=>el.classList.add('show'),from+i*step)); }
+function resetAll(){
+  document.querySelectorAll('.show').forEach(e=>e.classList.remove('show'));
+  document.querySelectorAll('.hl,.no,.hot,.closed,.pressed').forEach(e=>e.classList.remove('hl','no','hot','closed','pressed'));
+  $('#field').hidden=true; $('#acts').hidden=true; $('#field').textContent=''; $('#field').classList.remove('cur','active'); $('#bub').classList.remove('gone'); $('#meter').classList.remove('gone'); document.querySelector('.det').classList.remove('writing');
+  $('#cpfInp').textContent=''; $('#pepInp').textContent=''; $('#pepTbl').style.opacity=0; $('#chip4471').textContent='Screening'; $('#chip4471').className='chip warn';
+  document.querySelectorAll('#tiles .v').forEach(v=>v.textContent='0'); $('#who').textContent='sphinx-agent-01';
+  curA.classList.remove('show'); curH.classList.remove('show');
+  document.querySelectorAll('.page').forEach(p=>{p.classList.remove('on','left')}); $('#pQueue').classList.add('on');
+}
+const SCENES=[
+  async()=>{ await say('The agent logs in and takes the next alert.'); await go('pld.suafintech.com.br/alertas'); await sleep(500); const row=$('#row4471'); await move(curA,row,-120,0,1100); row.classList.add('hot'); await click(curA); await sleep(500); show('pDetail'); await go('pld.suafintech.com.br/alertas/ALR-4471'); await sleep(900); },
+  async()=>{ await say('First, the tax authority: is the CPF real and regular?'); show('pReceita'); await go('servicos.receita.fazenda.gov.br/cpf'); await sleep(500); await move(curA,$('#cpfInp'),0,0,700); await click(curA); await type($('#cpfInp'),'***.482.117-**',45); await move(curA,$('#cpfBtn'),0,0,500); await click(curA); await sleep(300); $('#cpfRes').classList.add('show'); await sleep(1500); },
+  async()=>{ await say('Then the PEP list. Three namesakes.'); show('pCGU'); await go('portaldatransparencia.gov.br/pep'); await sleep(400); await move(curA,$('#pepInp'),0,0,700); await click(curA); await type($('#pepInp'),'João Carlos da Silva',40); await sleep(300); $('#pepTbl').style.opacity=1; await sleep(700); const rows=[...document.querySelectorAll('#pepTbl .r')].slice(1); for(const r of rows){ await move(curA,r,-60,0,500); r.classList.add('hl'); await sleep(550); r.classList.remove('hl'); r.classList.add('no'); } await say('None was born on his date. Not him.'); $('#pepRes').classList.add('show'); await sleep(1400); },
+  async()=>{ await say('Media, sanctions, company links, transactions.'); show('pMedia'); await go('checks · 4 sources'); await sleep(400); const rows=[...document.querySelectorAll('#srch .row')]; for(const r of rows){ await move(curA,r,-200,0,420); r.classList.add('show'); await sleep(380);} await sleep(900); },
+  async()=>{ await say('Back in the case, with notes the inspector can read.'); show('pDetail'); await go('pld.suafintech.com.br/alertas/ALR-4471'); await sleep(500); move(curA,$('#notes'),-40,-60,800); const notes=[...document.querySelectorAll('#notes li')]; for(const n of notes){ n.classList.add('show'); $('#nbclock').textContent=n.querySelector('small').textContent.split('·')[1].trim(); await sleep(520);} await sleep(700); },
+  async()=>{ await say('Three roles argue it out before anything is recommended.'); const bs=[...document.querySelectorAll('#bub .b')]; for(const b of bs){ await sleep(900); b.classList.add('show'); } await sleep(500); $('#meter').classList.add('show'); await sleep(1600); },
+  async()=>{ await say('It writes the justification. In Portuguese.'); const bs=[...document.querySelectorAll('#bub .b')]; bs.forEach(b=>b.classList.remove('show')); $('#meter').classList.remove('show'); await sleep(400); $('#bub').classList.add('gone'); $('#meter').classList.add('gone'); document.querySelector('.det').classList.add('writing'); const f=$('#field'); f.hidden=false; f.classList.add('cur'); await sleep(200); await move(curA,f,0,-30,600); await click(curA); await type(f,'Três homônimos na lista PEP da CGU; nenhum coincide com a data de nascimento (14/07/1984) nem com o CPF. Situação cadastral regular. Sócio de empresa ativa desde 2019, sem CEIS/CNEP. Sem sanções nem mídia adversa em 24 meses. Perfil transacional compatível com a renda; depósitos abaixo de R$ 2.000, sem fracionamento. Conclusão: falso positivo. Encerrar sem comunicação ao COAF.',16); f.classList.remove('cur'); await sleep(600); },
+  async()=>{ await say('Your analyst decides. One click.'); $('#acts').hidden=false; $('#who').textContent='Ana P.'; curA.classList.remove('show'); await sleep(300); await move(curH,$('#approve'),0,0,1100); await click(curH); $('#approve').classList.add('pressed'); await sleep(250); $('#stamp').classList.add('show'); await sleep(1600); show('pQueue'); await go('pld.suafintech.com.br/alertas'); curH.classList.remove('show'); await sleep(500); const row=$('#row4471'); row.classList.remove('hot'); row.classList.add('closed'); const c=$('#chip4471'); c.textContent='Encerrado'; c.className='chip ok'; await sleep(1200); },
+  async()=>{ await say('One alert, one minute forty, nothing filed without a person.'); show('pEnd'); await go('pilot · 200 historical alerts · shadow mode'); await sleep(300); const tiles=[...document.querySelectorAll('#tiles .tile')]; reveal(tiles,350,100); for(const v of document.querySelectorAll('#tiles .v')){ const n=+v.dataset.n, suf=v.dataset.suffix||''; const t0=performance.now(); await new Promise(res=>{ (function f(){ const k=Math.min(1,(performance.now()-t0)/900); const val=Math.round(n*(1-Math.pow(1-k,3))); v.textContent=(suf==='s'?Math.floor(val/60)+':'+String(val%60).padStart(2,'0'):val+suf); if(k<1) requestAnimationFrame(f); else res(); })(); }); } },
+];
+const DUR=[5200,7500,9800,6200,5200,6600,9800,7200,4000];
+const prog=$('#prog'); SCENES.forEach(()=>prog.appendChild(document.createElement('i')));
+async function run(){ const my=++token; resetAll(); for(let i=0;i<SCENES.length;i++){ if(my!==token) return; [...prog.children].forEach((b,k)=>{ b.classList.toggle('done',k<i); b.classList.remove('run'); if(k===i){ b.style.setProperty('--d',DUR[i]+'ms'); void b.offsetWidth; b.classList.add('run'); } }); await SCENES[i](); if(my!==token) return; } [...prog.children].forEach(b=>b.classList.add('done')); }
+$('#pause').addEventListener('click',()=>{ paused=!paused; $('#pause').textContent=paused?'Resume':'Pause'; });
+$('#restart').addEventListener('click',()=>{ paused=false; $('#pause').textContent='Pause'; run(); });
+$('#replay').addEventListener('click',()=>{ paused=false; $('#pause').textContent='Pause'; run(); });
+window.addEventListener('resize',()=>{});
+run();
+</script>
+</body>
+</html>
